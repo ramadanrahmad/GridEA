@@ -42,6 +42,8 @@ input double InpGridStep8    = 1.8;    // Jarak Layer Lot 8
 input int    InpLimitLayer8  = 1;      // Jumlah layer lot kedelapan
 input double InpLot8         = 0.08;   // Lot kedelapan
 
+input bool   InpUseAutoSL    = false;  // Gunakan Auto SL di akhir layer (Jarak 5 Pips)
+
 // --- VARIABEL GLOBAL ---
 ulong last_processed_ticket = 0; 
 
@@ -185,7 +187,7 @@ void CleanupMemory()
          long m = 0;
          
          if(ArraySize(parts) == 3 && (parts[2] == "SL" || parts[2] == "TP")) m = StringToInteger(parts[1]);
-         if(ArraySize(parts) == 3 && parts[1] == "RunnerLock") m = StringToInteger(parts[2]); 
+         if(ArraySize(parts) == 3 && (parts[1] == "RunnerLock" || parts[1] == "SyncLock")) m = StringToInteger(parts[2]); 
          
          if(m != 0)
            {
@@ -349,30 +351,39 @@ double GetDistanceForLayer(int layer_index)
    return total_distance;
   }
 
-void ExecuteGridFromPrice(int limit_type, double base_price, double manual_tp)
+void ExecuteGridFromPrice(int limit_type, double base_price, double manual_sl, double manual_tp)
   {
    int total_layers = InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5 + InpLimitLayer6 + InpLimitLayer7 + InpLimitLayer8; 
    ulong current_magic = (ulong)GetTickCount64(); 
    trade.SetExpertMagicNumber(current_magic);
    
+   double total_dist = GetDistanceForLayer(total_layers);
+   double auto_sl = 0.0;
+   
    if(limit_type == ORDER_TYPE_BUY_LIMIT)
      {
+      if(manual_sl > 0.0) auto_sl = manual_sl;
+      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price - total_dist - 0.5, _Digits);
+      
       for(int i = 0; i <= total_layers; i++)
         {
          double lot = (i == 0) ? InpLot1 : GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(base_price - current_distance, _Digits);
-         trade.BuyLimit(lot, limit_price, _Symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Catch");
+         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid XAU Catch");
         }
      }
    else if(limit_type == ORDER_TYPE_SELL_LIMIT)
      {
+      if(manual_sl > 0.0) auto_sl = manual_sl;
+      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price + total_dist + 0.5, _Digits);
+      
       for(int i = 0; i <= total_layers; i++)
         {
          double lot = (i == 0) ? InpLot1 : GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(base_price + current_distance, _Digits);
-         trade.SellLimit(lot, limit_price, _Symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Catch");
+         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid XAU Catch");
         }
      }
   }
@@ -383,28 +394,35 @@ void ExecuteGrid(int direction)
    ulong current_magic = (ulong)GetTickCount64(); 
    trade.SetExpertMagicNumber(current_magic);
    
+   double total_dist = GetDistanceForLayer(total_layers);
+   double auto_sl = 0.0;
+   
    if(direction == ORDER_TYPE_BUY)
      {
       double Ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      trade.Buy(InpLot1, _Symbol, Ask, 0.0, 0.0, "Grid XAU BUY");
+      if(InpUseAutoSL) auto_sl = NormalizeDouble(Ask - total_dist - 0.5, _Digits);
+      
+      trade.Buy(InpLot1, _Symbol, Ask, auto_sl, 0.0, "Grid XAU BUY");
       for(int i = 1; i <= total_layers; i++)
         {
          double lot = GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(Ask - current_distance, _Digits);
-         trade.BuyLimit(lot, limit_price, _Symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Buy Limit");
+         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Buy Limit");
         }
      }
    else if(direction == ORDER_TYPE_SELL)
      {
       double Bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      trade.Sell(InpLot1, _Symbol, Bid, 0.0, 0.0, "Grid XAU SELL");
+      if(InpUseAutoSL) auto_sl = NormalizeDouble(Bid + total_dist + 0.5, _Digits);
+      
+      trade.Sell(InpLot1, _Symbol, Bid, auto_sl, 0.0, "Grid XAU SELL");
       for(int i = 1; i <= total_layers; i++)
         {
          double lot = GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(Bid + current_distance, _Digits);
-         trade.SellLimit(lot, limit_price, _Symbol, 0.0, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Sell Limit");
+         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Sell Limit");
         }
      }
   }
@@ -424,6 +442,11 @@ void SyncGroupSLTP(long magic, long type)
    double new_sl = last_known_sl;
    double new_tp = last_known_tp;
    
+   string lock_name = "GridV22_SyncLock_" + IntegerToString(magic);
+   ulong lock_time = GlobalVariableCheck(lock_name) ? (ulong)GlobalVariableGet(lock_name) : 0;
+   ulong current_time = GetTickCount64();
+   bool can_detect = (current_time > lock_time);
+   
    ulong best_ticket = 0;
    double best_price = (type == POSITION_TYPE_BUY) ? 999999.0 : 0.0;
    int group_positions = 0;
@@ -440,9 +463,26 @@ void SyncGroupSLTP(long magic, long type)
             if(type == POSITION_TYPE_BUY && open_price < best_price) { best_price = open_price; best_ticket = ticket; }
             if(type == POSITION_TYPE_SELL && open_price > best_price) { best_price = open_price; best_ticket = ticket; }
             
-            double pos_sl = PositionGetDouble(POSITION_SL);
-            double pos_tp = PositionGetDouble(POSITION_TP);
-            
+            if(can_detect)
+              {
+               double pos_sl = PositionGetDouble(POSITION_SL);
+               double pos_tp = PositionGetDouble(POSITION_TP);
+               if(pos_sl > 0.0 && MathAbs(pos_sl - last_known_sl) > _Point * 0.5) { new_sl = pos_sl; sl_changed = true; }
+               if(pos_tp > 0.0 && MathAbs(pos_tp - last_known_tp) > _Point * 0.5) { new_tp = pos_tp; tp_changed = true; }
+              }
+           }
+        }
+     }
+     
+   if(can_detect)
+     {
+      for(int i = 0; i < OrdersTotal(); i++)
+        {
+         ulong ticket = OrderGetTicket(i);
+         if(OrderSelect(ticket) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == magic)
+           {
+            double pos_sl = OrderGetDouble(ORDER_SL);
+            double pos_tp = OrderGetDouble(ORDER_TP);
             if(pos_sl > 0.0 && MathAbs(pos_sl - last_known_sl) > _Point * 0.5) { new_sl = pos_sl; sl_changed = true; }
             if(pos_tp > 0.0 && MathAbs(pos_tp - last_known_tp) > _Point * 0.5) { new_tp = pos_tp; tp_changed = true; }
            }
@@ -453,6 +493,7 @@ void SyncGroupSLTP(long magic, long type)
      {
       if(sl_changed) GlobalVariableSet(gv_sl, new_sl);
       if(tp_changed) GlobalVariableSet(gv_tp, new_tp);
+      GlobalVariableSet(lock_name, (double)(current_time + 1500)); 
      }
      
    for(int i = PositionsTotal() - 1; i >= 0; i--)
@@ -468,18 +509,42 @@ void SyncGroupSLTP(long magic, long type)
             double target_sl = (new_sl > 0.0) ? new_sl : current_sl;
             double target_tp = (new_tp > 0.0) ? new_tp : current_tp;
             
-            // PENGECUALIAN TP UNTUK SURVIVAL RUNNER: 
-            // Jika ada lebih dari 1 posisi di grup, posisi terdalam (best_ticket) TIDAK BOLEH punya TP!
-            // Agar saat TP masal disentuh, MT5 hanya menutup posisi yang lain, dan best_ticket tetap hidup sebagai Runner.
-            if(group_positions > 1 && ticket == best_ticket)
-              {
-               target_tp = 0.0; 
-              }
+            if(group_positions > 1 && ticket == best_ticket) target_tp = 0.0; 
             
             if(MathAbs(current_sl - target_sl) > _Point * 0.5 || MathAbs(current_tp - target_tp) > _Point * 0.5)
               {
                trade.PositionModify(ticket, target_sl, target_tp);
               }
+           }
+        }
+     }
+     
+   for(int i = OrdersTotal() - 1; i >= 0; i--)
+     {
+      ulong ticket = OrderGetTicket(i);
+      if(OrderSelect(ticket) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == magic)
+        {
+         double current_sl = OrderGetDouble(ORDER_SL);
+         double current_tp = OrderGetDouble(ORDER_TP);
+         double target_sl = (new_sl > 0.0) ? new_sl : current_sl;
+         double target_tp = (new_tp > 0.0) ? new_tp : current_tp;
+         // Validasi ketat MT5 untuk Limit Order (Mencegah error Invalid Stops pada kasus SL+)
+         long order_type = OrderGetInteger(ORDER_TYPE);
+         double open_price = OrderGetDouble(ORDER_PRICE_OPEN);
+         
+         bool should_delete = false;
+         if(order_type == ORDER_TYPE_BUY_LIMIT && target_sl >= open_price) should_delete = true;
+         if(order_type == ORDER_TYPE_SELL_LIMIT && target_sl > 0.0 && target_sl <= open_price) should_delete = true;
+         
+         if(should_delete)
+           {
+            trade.OrderDelete(ticket);
+            continue;
+           }
+         
+         if(MathAbs(current_sl - target_sl) > _Point * 0.5 || MathAbs(current_tp - target_tp) > _Point * 0.5)
+           {
+            trade.OrderModify(ticket, open_price, target_sl, target_tp, ORDER_TIME_GTC, 0);
            }
         }
      }
@@ -508,11 +573,12 @@ void OnTick()
                if(type == ORDER_TYPE_BUY_LIMIT || type == ORDER_TYPE_SELL_LIMIT)
                  {
                   double manual_price = OrderGetDouble(ORDER_PRICE_OPEN);
+                  double manual_sl = OrderGetDouble(ORDER_SL);
                   double manual_tp = OrderGetDouble(ORDER_TP); 
                   if(trade.OrderDelete(ticket)) 
                     {
                      last_processed_ticket = ticket; 
-                     ExecuteGridFromPrice((int)type, manual_price, manual_tp); 
+                     ExecuteGridFromPrice((int)type, manual_price, manual_sl, manual_tp); 
                     }
                  }
               }
