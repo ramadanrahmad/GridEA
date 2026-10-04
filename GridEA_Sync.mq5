@@ -161,11 +161,25 @@ void ExecuteRunnerPhase(long magic, long type)
    // 4. Jadikan posisi terbaik sebagai RUNNER
    if(best_ticket > 0 && PositionSelectByTicket(best_ticket))
      {
+      long pos_type = PositionGetInteger(POSITION_TYPE);
+      double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
       double current_sl = PositionGetDouble(POSITION_SL);
-      trade.PositionModify(best_ticket, current_sl, 0.0); // Hapus TP agar bebas lari
       
-      double volume = PositionGetDouble(POSITION_VOLUME);
-      if(volume > 0.01) trade.PositionClosePartial(best_ticket, volume - 0.01);
+      double be_sl = current_sl;
+      double stop_level = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+      
+      if(pos_type == POSITION_TYPE_BUY)
+        {
+         double target_be = NormalizeDouble(open_price + 0.03, _Digits);
+         if(SymbolInfoDouble(_Symbol, SYMBOL_BID) - target_be > stop_level) be_sl = target_be;
+        }
+      else if(pos_type == POSITION_TYPE_SELL)
+        {
+         double target_be = NormalizeDouble(open_price - 0.03, _Digits);
+         if(target_be - SymbolInfoDouble(_Symbol, SYMBOL_ASK) > stop_level) be_sl = target_be;
+        }
+        
+      trade.PositionModify(best_ticket, be_sl, 0.0); // Set BE+ 0.3 pips dan Hapus TP agar bebas lari
      }
      
    // 5. Hapus tracking SL/TP agar Auto-Sync tidak membebani Runner
