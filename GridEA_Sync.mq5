@@ -451,6 +451,16 @@ void SyncGroupSLTP(long magic, long type)
    double last_known_sl = GlobalVariableCheck(gv_sl) ? GlobalVariableGet(gv_sl) : 0.0;
    double last_known_tp = GlobalVariableCheck(gv_tp) ? GlobalVariableGet(gv_tp) : 0.0;
    
+   // ANTI-TP-KILLER: Freeze sync if price is hitting TP to prevent race condition with Runner Phase
+   if(last_known_tp > 0.0)
+     {
+      double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+      double current_ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+      if(type == POSITION_TYPE_BUY && current_bid >= last_known_tp) return;
+      if(type == POSITION_TYPE_SELL && current_ask <= last_known_tp) return;
+     }
+
+   
    bool sl_changed = false;
    bool tp_changed = false;
    double new_sl = last_known_sl;
