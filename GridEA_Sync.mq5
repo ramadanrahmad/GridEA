@@ -457,8 +457,8 @@ void SyncGroupSLTP(long magic, long type)
    double new_tp = last_known_tp;
    
    string lock_name = "GridV22_SyncLock_" + IntegerToString(magic);
-   ulong lock_time = GlobalVariableCheck(lock_name) ? (ulong)GlobalVariableGet(lock_name) : 0;
-   ulong current_time = GetTickCount64();
+   datetime lock_time = GlobalVariableCheck(lock_name) ? (datetime)GlobalVariableGet(lock_name) : 0;
+   datetime current_time = TimeCurrent();
    bool can_detect = (current_time > lock_time);
    
    ulong best_ticket = 0;
@@ -507,7 +507,7 @@ void SyncGroupSLTP(long magic, long type)
      {
       if(sl_changed) GlobalVariableSet(gv_sl, new_sl);
       if(tp_changed) GlobalVariableSet(gv_tp, new_tp);
-      GlobalVariableSet(lock_name, (double)(current_time + 1500)); 
+      GlobalVariableSet(lock_name, (double)(current_time + 2)); 
      }
      
    for(int i = PositionsTotal() - 1; i >= 0; i--)
