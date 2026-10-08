@@ -191,6 +191,31 @@ void ExecuteRunnerPhase(long magic, long type)
 
 void CleanupMemory()
   {
+   // Enforce Limit Order Cleanup untuk grup yang sedang dalam mode Runner (berjaga-jaga jika Server MT5 sibuk saat TP Hit)
+   for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
+     {
+      string name = GlobalVariableName(i);
+      if(StringFind(name, "GridV22_RunnerLock_") == 0)
+        {
+         string parts[];
+         StringSplit(name, '_', parts);
+         long m = 0;
+         if(ArraySize(parts) == 3) m = StringToInteger(parts[2]);
+         
+         if(m != 0)
+           {
+            for(int o = OrdersTotal() - 1; o >= 0; o--)
+              {
+               ulong t = OrderGetTicket(o);
+               if(OrderSelect(t) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == m)
+                 {
+                  trade.OrderDelete(t);
+                 }
+              }
+           }
+        }
+     }
+
    for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
      {
       string name = GlobalVariableName(i);
