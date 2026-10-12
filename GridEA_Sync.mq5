@@ -9,40 +9,88 @@
 #include <Trade\Trade.mqh>
 CTrade trade;
 
-// --- SETTING KHUSUS SKALA XAUUSD (EMAS) ---
-input double InpGridStep1    = 0.4;    // Jarak Layer Lot 1
-input int    InpLimitLayer1  = 5;      // Jumlah layer lot pertama
-input double InpLot1         = 0.01;   // Lot pertama
+// --- PENGATURAN GRID MULTI-INSTRUMEN (SATUAN PIPS) ---
+// Catatan: 1 Pip = $0.10 di XAUUSD (Emas) / 0.00010 di EURUSD (Forex 5 Digit).
+// Kompatibel: Jika Anda memasukkan format lama (0.4 - 1.8), EA otomatis mengartikannya sebagai (4.0 - 18.0) Pip.
+input double InpGridStep1      = 4.0;    // Jarak Layer Lot 1 (Pips)
+input int    InpLimitLayer1    = 5;      // Jumlah layer lot pertama
+input double InpLot1           = 0.01;   // Lot pertama
 
-input double InpGridStep2    = 0.6;    // Jarak Layer Lot 2
-input int    InpLimitLayer2  = 6;      // Jumlah layer lot kedua
-input double InpLot2         = 0.02;   // Lot kedua
+input double InpGridStep2      = 6.0;    // Jarak Layer Lot 2 (Pips)
+input int    InpLimitLayer2    = 6;      // Jumlah layer lot kedua
+input double InpLot2           = 0.02;   // Lot kedua
 
-input double InpGridStep3    = 0.8;    // Jarak Layer Lot 3
-input int    InpLimitLayer3  = 7;      // Jumlah layer lot ketiga
-input double InpLot3         = 0.03;   // Lot ketiga
+input double InpGridStep3      = 8.0;    // Jarak Layer Lot 3 (Pips)
+input int    InpLimitLayer3    = 7;      // Jumlah layer lot ketiga
+input double InpLot3           = 0.03;   // Lot ketiga
 
-input double InpGridStep4    = 1.0;    // Jarak Layer Lot 4
-input int    InpLimitLayer4  = 1;      // Jumlah layer lot keempat
-input double InpLot4         = 0.04;   // Lot keempat
+input double InpGridStep4      = 10.0;   // Jarak Layer Lot 4 (Pips)
+input int    InpLimitLayer4    = 1;      // Jumlah layer lot keempat
+input double InpLot4           = 0.04;   // Lot keempat
 
-input double InpGridStep5    = 1.2;    // Jarak Layer Lot 5
-input int    InpLimitLayer5  = 1;      // Jumlah layer lot kelima
-input double InpLot5         = 0.05;   // Lot kelima
+input double InpGridStep5      = 12.0;   // Jarak Layer Lot 5 (Pips)
+input int    InpLimitLayer5    = 1;      // Jumlah layer lot kelima
+input double InpLot5           = 0.05;   // Lot kelima
 
-input double InpGridStep6    = 1.4;    // Jarak Layer Lot 6
-input int    InpLimitLayer6  = 1;      // Jumlah layer lot keenam
-input double InpLot6         = 0.06;   // Lot keenam
+input double InpGridStep6      = 14.0;   // Jarak Layer Lot 6 (Pips)
+input int    InpLimitLayer6    = 1;      // Jumlah layer lot keenam
+input double InpLot6           = 0.06;   // Lot keenam
 
-input double InpGridStep7    = 1.6;    // Jarak Layer Lot 7
-input int    InpLimitLayer7  = 1;      // Jumlah layer lot ketujuh
-input double InpLot7         = 0.07;   // Lot ketujuh
+input double InpGridStep7      = 16.0;   // Jarak Layer Lot 7 (Pips)
+input int    InpLimitLayer7    = 1;      // Jumlah layer lot ketujuh
+input double InpLot7           = 0.07;   // Lot ketujuh
 
-input double InpGridStep8    = 1.8;    // Jarak Layer Lot 8
-input int    InpLimitLayer8  = 1;      // Jumlah layer lot kedelapan
-input double InpLot8         = 0.08;   // Lot kedelapan
+input double InpGridStep8      = 18.0;   // Jarak Layer Lot 8 (Pips)
+input int    InpLimitLayer8    = 1;      // Jumlah layer lot kedelapan
+input double InpLot8           = 0.08;   // Lot kedelapan
 
-input bool   InpUseAutoSL    = false;  // Gunakan Auto SL di akhir layer (Jarak 5 Pips)
+input bool   InpUseAutoSL      = false;  // Gunakan Auto SL di akhir layer
+input double InpAutoSLDistance = 5.0;    // Jarak Auto SL dari layer terakhir (Pips)
+
+//+------------------------------------------------------------------+
+//| Mengambil ukuran 1 Pip sesuai instrumen (Forex vs Logam/Emas)   |
+//+------------------------------------------------------------------+
+double GetPipSize()
+  {
+   string sym = _Symbol;
+   StringToUpper(sym);
+   
+   // XAUUSD / GOLD (Logam Mulia)
+   if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "GOLD") >= 0)
+     {
+      // Standar trading Gold: 1 pip = $0.10 (10 point pada 2-digit, 100 point pada 3-digit)
+      if(_Digits == 2) return 0.10;
+      if(_Digits == 3) return 0.10;
+      return 10.0 * _Point;
+     }
+     
+   // Forex 5 Digit & 3 Digit (JPY)
+   if(_Digits == 5 || _Digits == 3)
+     {
+      return 10.0 * _Point; // 1 pip = 0.00010 (EURUSD) atau 0.010 (USDJPY)
+     }
+     
+   // Forex 4 Digit & 2 Digit
+   if(_Digits == 4 || _Digits == 2)
+     {
+      return _Point;        // 1 pip = 0.0001 atau 0.01
+     }
+     
+   return _Point;
+  }
+
+//+------------------------------------------------------------------+
+//| Menstandarisasi input step ke satuan Pips                       |
+//+------------------------------------------------------------------+
+double GetPipStep(double step_input)
+  {
+   // Jika pengguna memasukkan format lama (0.4 - 1.8), konversi otomatis ke 4.0 - 18.0 Pips
+   if(step_input > 0.0 && step_input < 2.0)
+     {
+      return step_input * 10.0;
+     }
+   return step_input;
+  }
 
 // --- VARIABEL GLOBAL ---
 ulong last_processed_ticket = 0; 
@@ -100,7 +148,7 @@ int OnInit()
    ObjectSetInteger(0, "BtnClearSLTP", OBJPROP_BGCOLOR, clrDarkViolet);
    ObjectSetInteger(0, "BtnClearSLTP", OBJPROP_COLOR, clrWhite);
 
-   Print("Asisten Grid V22.00 (Independent Magic + Smart Runner) Siap Tempur!");
+   Print("Asisten Grid V22.00 Multi-Instrument (Magic Sync + Smart Runner) Aktif pada: ", _Symbol, " (1 Pip = ", DoubleToString(GetPipSize(), _Digits), ")");
    return(INIT_SUCCEEDED);
   }
 
@@ -167,15 +215,16 @@ void ExecuteRunnerPhase(long magic, long type)
       
       double be_sl = current_sl;
       double stop_level = SymbolInfoInteger(_Symbol, SYMBOL_TRADE_STOPS_LEVEL) * _Point;
+      double be_offset = 0.3 * GetPipSize(); // Kunci BE+ 0.3 Pips secara dinamis sesuai instrumen
       
       if(pos_type == POSITION_TYPE_BUY)
         {
-         double target_be = NormalizeDouble(open_price + 0.03, _Digits);
+         double target_be = NormalizeDouble(open_price + be_offset, _Digits);
          if(SymbolInfoDouble(_Symbol, SYMBOL_BID) - target_be > stop_level) be_sl = target_be;
         }
       else if(pos_type == POSITION_TYPE_SELL)
         {
-         double target_be = NormalizeDouble(open_price - 0.03, _Digits);
+         double target_be = NormalizeDouble(open_price - be_offset, _Digits);
          if(target_be - SymbolInfoDouble(_Symbol, SYMBOL_ASK) > stop_level) be_sl = target_be;
         }
         
@@ -373,19 +422,27 @@ double GetLotForLayer(int layer_index)
    else return InpLot8;
   }
 
+double GetStepDistance(int layer_index)
+  {
+   double step_pips = 0.0;
+   if (layer_index <= InpLimitLayer1) step_pips = GetPipStep(InpGridStep1);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2) step_pips = GetPipStep(InpGridStep2);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3) step_pips = GetPipStep(InpGridStep3);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4) step_pips = GetPipStep(InpGridStep4);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5) step_pips = GetPipStep(InpGridStep5);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5 + InpLimitLayer6) step_pips = GetPipStep(InpGridStep6);
+   else if (layer_index <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5 + InpLimitLayer6 + InpLimitLayer7) step_pips = GetPipStep(InpGridStep7);
+   else step_pips = GetPipStep(InpGridStep8);
+   
+   return step_pips * GetPipSize();
+  }
+
 double GetDistanceForLayer(int layer_index)
   {
    double total_distance = 0.0;
    for(int i = 1; i <= layer_index; i++)
      {
-      if (i <= InpLimitLayer1) total_distance += InpGridStep1;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2) total_distance += InpGridStep2;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3) total_distance += InpGridStep3;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4) total_distance += InpGridStep4;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5) total_distance += InpGridStep5;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5 + InpLimitLayer6) total_distance += InpGridStep6;
-      else if (i <= InpLimitLayer1 + InpLimitLayer2 + InpLimitLayer3 + InpLimitLayer4 + InpLimitLayer5 + InpLimitLayer6 + InpLimitLayer7) total_distance += InpGridStep7;
-      else total_distance += InpGridStep8;
+      total_distance += GetStepDistance(i);
      }
    return total_distance;
   }
@@ -397,32 +454,33 @@ void ExecuteGridFromPrice(int limit_type, double base_price, double manual_sl, d
    trade.SetExpertMagicNumber(current_magic);
    
    double total_dist = GetDistanceForLayer(total_layers);
+   double auto_sl_dist = InpAutoSLDistance * GetPipSize();
    double auto_sl = 0.0;
    
    if(limit_type == ORDER_TYPE_BUY_LIMIT)
      {
       if(manual_sl > 0.0) auto_sl = manual_sl;
-      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price - total_dist - 0.5, _Digits);
+      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price - total_dist - auto_sl_dist, _Digits);
       
       for(int i = 0; i <= total_layers; i++)
         {
          double lot = (i == 0) ? InpLot1 : GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(base_price - current_distance, _Digits);
-         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid XAU Catch");
+         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid Catch");
         }
      }
    else if(limit_type == ORDER_TYPE_SELL_LIMIT)
      {
       if(manual_sl > 0.0) auto_sl = manual_sl;
-      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price + total_dist + 0.5, _Digits);
+      else if(InpUseAutoSL) auto_sl = NormalizeDouble(base_price + total_dist + auto_sl_dist, _Digits);
       
       for(int i = 0; i <= total_layers; i++)
         {
          double lot = (i == 0) ? InpLot1 : GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(base_price + current_distance, _Digits);
-         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid XAU Catch");
+         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, manual_tp, ORDER_TIME_GTC, 0, "Grid Catch");
         }
      }
   }
@@ -434,34 +492,35 @@ void ExecuteGrid(int direction)
    trade.SetExpertMagicNumber(current_magic);
    
    double total_dist = GetDistanceForLayer(total_layers);
+   double auto_sl_dist = InpAutoSLDistance * GetPipSize();
    double auto_sl = 0.0;
    
    if(direction == ORDER_TYPE_BUY)
      {
       double Ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
-      if(InpUseAutoSL) auto_sl = NormalizeDouble(Ask - total_dist - 0.5, _Digits);
+      if(InpUseAutoSL) auto_sl = NormalizeDouble(Ask - total_dist - auto_sl_dist, _Digits);
       
-      trade.Buy(InpLot1, _Symbol, Ask, auto_sl, 0.0, "Grid XAU BUY");
+      trade.Buy(InpLot1, _Symbol, Ask, auto_sl, 0.0, "Grid BUY");
       for(int i = 1; i <= total_layers; i++)
         {
          double lot = GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(Ask - current_distance, _Digits);
-         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Buy Limit");
+         trade.BuyLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid Buy Limit");
         }
      }
    else if(direction == ORDER_TYPE_SELL)
      {
       double Bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
-      if(InpUseAutoSL) auto_sl = NormalizeDouble(Bid + total_dist + 0.5, _Digits);
+      if(InpUseAutoSL) auto_sl = NormalizeDouble(Bid + total_dist + auto_sl_dist, _Digits);
       
-      trade.Sell(InpLot1, _Symbol, Bid, auto_sl, 0.0, "Grid XAU SELL");
+      trade.Sell(InpLot1, _Symbol, Bid, auto_sl, 0.0, "Grid SELL");
       for(int i = 1; i <= total_layers; i++)
         {
          double lot = GetLotForLayer(i);
          double current_distance = GetDistanceForLayer(i);
          double limit_price = NormalizeDouble(Bid + current_distance, _Digits);
-         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid XAU Sell Limit");
+         trade.SellLimit(lot, limit_price, _Symbol, auto_sl, 0.0, ORDER_TIME_GTC, 0, "Grid Sell Limit");
         }
      }
   }
