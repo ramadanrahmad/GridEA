@@ -163,21 +163,27 @@ void OnDeinit(const int reason)
 
 void ExecuteRunnerPhase(long magic, long type)
   {
+   if(magic == 0) return;
+   
    // Mencegah loop eksekusi ganda jika banyak posisi ditutup serentak
    string lock_name = "GridV22_RunnerLock_" + IntegerToString(magic);
    if(GlobalVariableCheck(lock_name)) return; 
    GlobalVariableSet(lock_name, 1.0); 
    
-   // 1. Bersihkan limit orders
+   // 1. Bersihkan limit orders seketika
    for(int i = OrdersTotal() - 1; i >= 0; i--)
      {
       ulong ticket = OrderGetTicket(i);
-      if(OrderSelect(ticket) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == magic) trade.OrderDelete(ticket);
+      if(OrderSelect(ticket) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == magic)
+        {
+         trade.OrderDelete(ticket);
+        }
      }
      
    // 2. Cari posisi terbaik yang MASIH HIDUP di grup ini
    ulong best_ticket = 0;
    double best_price = (type == POSITION_TYPE_BUY) ? 999999.0 : 0.0;
+   int group_positions = 0;
    
    for(int i = 0; i < PositionsTotal(); i++)
      {
@@ -186,6 +192,7 @@ void ExecuteRunnerPhase(long magic, long type)
         {
          if(PositionGetInteger(POSITION_MAGIC) == magic && PositionGetInteger(POSITION_TYPE) == type)
            {
+            group_positions++;
             double open_price = PositionGetDouble(POSITION_PRICE_OPEN);
             if(type == POSITION_TYPE_BUY && open_price < best_price) { best_price = open_price; best_ticket = ticket; }
             if(type == POSITION_TYPE_SELL && open_price > best_price) { best_price = open_price; best_ticket = ticket; }
@@ -193,15 +200,18 @@ void ExecuteRunnerPhase(long magic, long type)
         }
      }
      
-   // 3. Tutup paksa semua posisi KECUALI yang terbaik
-   for(int i = PositionsTotal() - 1; i >= 0; i--)
+   // 3. Tutup paksa semua posisi KECUALI yang terbaik jika masih ada lebih dari 1 posisi
+   if(group_positions > 1)
      {
-      ulong ticket = PositionGetTicket(i);
-      if(PositionSelectByTicket(ticket) && PositionGetString(POSITION_SYMBOL) == _Symbol)
+      for(int i = PositionsTotal() - 1; i >= 0; i--)
         {
-         if(PositionGetInteger(POSITION_MAGIC) == magic && PositionGetInteger(POSITION_TYPE) == type)
+         ulong ticket = PositionGetTicket(i);
+         if(PositionSelectByTicket(ticket) && PositionGetString(POSITION_SYMBOL) == _Symbol)
            {
-            if(ticket != best_ticket) trade.PositionClose(ticket);
+            if(PositionGetInteger(POSITION_MAGIC) == magic && PositionGetInteger(POSITION_TYPE) == type)
+              {
+               if(ticket != best_ticket) trade.PositionClose(ticket);
+              }
            }
         }
      }
@@ -229,6 +239,10 @@ void ExecuteRunnerPhase(long magic, long type)
         }
         
       trade.PositionModify(best_ticket, be_sl, 0.0); // Set BE+ 0.3 pips dan Hapus TP agar bebas lari
+      
+      // Simpan tiket Runner secara permanen
+      string gv_runner = "GridV22_" + IntegerToString(magic) + "_RunnerTicket";
+      GlobalVariableSet(gv_runner, (double)best_ticket);
      }
      
    // 5. Hapus tracking SL/TP agar Auto-Sync tidak membebani Runner
@@ -241,24 +255,30 @@ void ExecuteRunnerPhase(long magic, long type)
 void CleanupMemory()
   {
    // Enforce Limit Order Cleanup untuk grup yang sedang dalam mode Runner (berjaga-jaga jika Server MT5 sibuk saat TP Hit)
-   for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
+   static datetime last_clean_time = 0;
+   datetime now = TimeCurrent();
+   if(now != last_clean_time)
      {
-      string name = GlobalVariableName(i);
-      if(StringFind(name, "GridV22_RunnerLock_") == 0)
+      last_clean_time = now;
+      for(int i = GlobalVariablesTotal() - 1; i >= 0; i--)
         {
-         string parts[];
-         StringSplit(name, '_', parts);
-         long m = 0;
-         if(ArraySize(parts) == 3) m = StringToInteger(parts[2]);
-         
-         if(m != 0)
+         string name = GlobalVariableName(i);
+         if(StringFind(name, "GridV22_RunnerLock_") == 0)
            {
-            for(int o = OrdersTotal() - 1; o >= 0; o--)
+            string parts[];
+            StringSplit(name, '_', parts);
+            long m = 0;
+            if(ArraySize(parts) == 3) m = StringToInteger(parts[2]);
+            
+            if(m != 0)
               {
-               ulong t = OrderGetTicket(o);
-               if(OrderSelect(t) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == m)
+               for(int o = OrdersTotal() - 1; o >= 0; o--)
                  {
-                  trade.OrderDelete(t);
+                  ulong t = OrderGetTicket(o);
+                  if(OrderSelect(t) && OrderGetString(ORDER_SYMBOL) == _Symbol && OrderGetInteger(ORDER_MAGIC) == m)
+                    {
+                     trade.OrderDelete(t);
+                    }
                  }
               }
            }
@@ -275,7 +295,7 @@ void CleanupMemory()
          long m = 0;
          
          if(ArraySize(parts) == 3 && (parts[2] == "SL" || parts[2] == "TP")) m = StringToInteger(parts[1]);
-         if(ArraySize(parts) == 3 && (parts[1] == "RunnerLock" || parts[1] == "SyncLock")) m = StringToInteger(parts[2]); 
+         if(ArraySize(parts) == 3 && (parts[1] == "RunnerLock" || parts[1] == "SyncLock" || parts[1] == "RunnerTicket")) m = StringToInteger(parts[2]); 
          
          if(m != 0)
            {
@@ -351,16 +371,36 @@ void OnTradeTransaction(const MqlTradeTransaction& trans, const MqlTradeRequest&
       ulong deal_ticket = trans.deal;
       if(deal_ticket > 0 && HistoryDealSelect(deal_ticket))
         {
-         long entry  = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
-         long reason = HistoryDealGetInteger(deal_ticket, DEAL_REASON);
-         
-         if(entry == DEAL_ENTRY_OUT && (reason == DEAL_REASON_CLIENT || reason == DEAL_REASON_TP))
+         long entry = HistoryDealGetInteger(deal_ticket, DEAL_ENTRY);
+         if(entry == DEAL_ENTRY_OUT)
            {
-            long order_ticket = HistoryDealGetInteger(deal_ticket, DEAL_ORDER);
-            if(HistoryOrderSelect(order_ticket) && HistoryOrderGetString(order_ticket, ORDER_SYMBOL) == _Symbol)
+            long magic = HistoryDealGetInteger(deal_ticket, DEAL_MAGIC);
+            if(magic == 0)
               {
-               long magic = HistoryOrderGetInteger(order_ticket, ORDER_MAGIC);
-               if(magic != 0) // Abaikan posisi manual
+               long pos_id = HistoryDealGetInteger(deal_ticket, DEAL_POSITION_ID);
+               if(pos_id > 0 && HistorySelectByPosition(pos_id))
+                 {
+                  for(int d = HistoryDealsTotal() - 1; d >= 0; d--)
+                    {
+                     ulong dt = HistoryDealGetTicket(d);
+                     if(dt > 0 && HistoryDealGetInteger(dt, DEAL_ENTRY) == DEAL_ENTRY_IN)
+                       {
+                        magic = HistoryDealGetInteger(dt, DEAL_MAGIC);
+                        if(magic != 0) break;
+                       }
+                    }
+                 }
+              }
+            
+            if(magic != 0 && HistoryDealGetString(deal_ticket, DEAL_SYMBOL) == _Symbol)
+              {
+               long reason = HistoryDealGetInteger(deal_ticket, DEAL_REASON);
+               double profit = HistoryDealGetDouble(deal_ticket, DEAL_PROFIT);
+               string gv_tp = "GridV22_" + IntegerToString(magic) + "_TP";
+               bool had_tp = GlobalVariableCheck(gv_tp);
+               
+               // Jika penutupan karena TP, atau profit positif saat TP aktif, atau reason TP/EXPERT/CLIENT
+               if(reason == DEAL_REASON_TP || (profit > 0.0 && had_tp) || reason == DEAL_REASON_CLIENT)
                  {
                   long deal_type = HistoryDealGetInteger(deal_ticket, DEAL_TYPE); 
                   long pos_type = (deal_type == DEAL_TYPE_SELL) ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
@@ -528,6 +568,25 @@ void ExecuteGrid(int direction)
 void SyncGroupSLTP(long magic, long type)
   {
    if(magic == 0) return; // ABAIKAN ENTRI MANUAL (Magic 0)
+   
+   // JIKA GRUP INI SUDAH MEMASUKI MODE RUNNER, JANGAN PERNAH SYNC TP KE RUNNER!
+   string runner_lock = "GridV22_RunnerLock_" + IntegerToString(magic);
+   if(GlobalVariableCheck(runner_lock))
+     {
+      string gv_runner = "GridV22_" + IntegerToString(magic) + "_RunnerTicket";
+      if(GlobalVariableCheck(gv_runner))
+        {
+         ulong rt = (ulong)GlobalVariableGet(gv_runner);
+         if(PositionSelectByTicket(rt))
+           {
+            if(PositionGetDouble(POSITION_TP) > 0.0)
+              {
+               trade.PositionModify(rt, PositionGetDouble(POSITION_SL), 0.0);
+              }
+           }
+        }
+      return;
+     }
    
    string gv_sl = "GridV22_" + IntegerToString(magic) + "_SL";
    string gv_tp = "GridV22_" + IntegerToString(magic) + "_TP";
@@ -715,6 +774,28 @@ void OnTick()
       processed_groups[processed_count+1] = type;
       processed_count += 2;
       
+      // JIKA SUDAH RUNNER LOCK, JANGAN SINKRONISASI
+      string lock_name = "GridV22_RunnerLock_" + IntegerToString(m);
+      if(GlobalVariableCheck(lock_name)) continue;
+      
+      // DETEKSI HARGA HIT TP SECARA LANGSUNG PADA TICK
+      string gv_tp = "GridV22_" + IntegerToString(m) + "_TP";
+      if(GlobalVariableCheck(gv_tp))
+        {
+         double group_tp = GlobalVariableGet(gv_tp);
+         if(group_tp > 0.0)
+           {
+            double current_bid = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+            double current_ask = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+            if((type == POSITION_TYPE_BUY && current_bid >= group_tp) ||
+               (type == POSITION_TYPE_SELL && current_ask <= group_tp))
+              {
+               ExecuteRunnerPhase(m, type);
+               continue;
+              }
+           }
+        }
+      
       SyncGroupSLTP(m, type);
      }
      
@@ -724,6 +805,10 @@ void OnTick()
       if(OrderGetString(ORDER_SYMBOL) != _Symbol) continue;
       long m = OrderGetInteger(ORDER_MAGIC);
       if(m == 0) continue; // Abaikan limit manual
+      
+      // JIKA SUDAH RUNNER LOCK, JANGAN SINKRONISASI LIMIT
+      string lock_name = "GridV22_RunnerLock_" + IntegerToString(m);
+      if(GlobalVariableCheck(lock_name)) continue;
       
       long o_type = OrderGetInteger(ORDER_TYPE);
       long type = (o_type == ORDER_TYPE_BUY_LIMIT) ? POSITION_TYPE_BUY : POSITION_TYPE_SELL;
