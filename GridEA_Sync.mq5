@@ -4,7 +4,7 @@
 //+------------------------------------------------------------------+
 #property copyright "Hak Cipta Anda"
 #property link      ""
-#property version   "22.22" 
+#property version   "22.23" 
 
 #include <Trade\Trade.mqh>
 CTrade trade;
@@ -161,19 +161,19 @@ void UpdateVisualDashboard()
       if(ObjectFind(0, bep_line_name) >= 0) ObjectDelete(0, bep_line_name);
      }
 
-   // 2. Pengaturan Ukuran & Posisi Panel di Kanan Atas (Di bawah tulisan Asisten_Grid_Pro)
-   int panel_width  = 350;
-   int panel_height = 82;
-   int right_margin = 10;
-   int top_margin   = 28;
-   int panel_x_dist = panel_width + right_margin;
-   int text_x_dist  = panel_x_dist - 14;
+   // 2. Pengaturan Ukuran & Posisi Panel di Kiri Bawah (CORNER_LEFT_LOWER)
+   int panel_width   = 350;
+   int panel_height  = 82;
+   int left_margin   = 20;  // Sejajar dengan tombol B di kiri
+   int bottom_margin = 15;  // Jarak dari batas bawah chart
+   int panel_y_dist  = panel_height + bottom_margin; // Titik atas kotak dari bawah chart
+   int text_x_dist   = left_margin + 12;
 
    if(ObjectFind(0, "GridV22_PanelBG") < 0)
       ObjectCreate(0, "GridV22_PanelBG", OBJ_RECTANGLE_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
-   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_XDISTANCE, panel_x_dist);
-   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_YDISTANCE, top_margin);
+   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_CORNER, CORNER_LEFT_LOWER);
+   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_XDISTANCE, left_margin);
+   ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_YDISTANCE, panel_y_dist);
    ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_XSIZE, panel_width);
    ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_YSIZE, panel_height);
    ObjectSetInteger(0, "GridV22_PanelBG", OBJPROP_BGCOLOR, C'22,26,35');
@@ -183,30 +183,30 @@ void UpdateVisualDashboard()
 
    if(ObjectFind(0, "GridV22_LblLot") < 0)
       ObjectCreate(0, "GridV22_LblLot", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_CORNER, CORNER_LEFT_LOWER);
    ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
    ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_XDISTANCE, text_x_dist);
-   ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_YDISTANCE, top_margin + 8);
+   ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_YDISTANCE, panel_y_dist - 8);
    ObjectSetString(0, "GridV22_LblLot", OBJPROP_FONT, "Consolas");
    ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_FONTSIZE, 9);
    ObjectSetInteger(0, "GridV22_LblLot", OBJPROP_COLOR, clrWhite);
 
    if(ObjectFind(0, "GridV22_LblLayer") < 0)
       ObjectCreate(0, "GridV22_LblLayer", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_CORNER, CORNER_LEFT_LOWER);
    ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
    ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_XDISTANCE, text_x_dist);
-   ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_YDISTANCE, top_margin + 31);
+   ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_YDISTANCE, panel_y_dist - 31);
    ObjectSetString(0, "GridV22_LblLayer", OBJPROP_FONT, "Consolas");
    ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_FONTSIZE, 9);
    ObjectSetInteger(0, "GridV22_LblLayer", OBJPROP_COLOR, clrWhite);
 
    if(ObjectFind(0, "GridV22_LblBEP") < 0)
       ObjectCreate(0, "GridV22_LblBEP", OBJ_LABEL, 0, 0, 0);
-   ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_CORNER, CORNER_RIGHT_UPPER);
+   ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_CORNER, CORNER_LEFT_LOWER);
    ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_ANCHOR, ANCHOR_LEFT_UPPER);
    ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_XDISTANCE, text_x_dist);
-   ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_YDISTANCE, top_margin + 54);
+   ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_YDISTANCE, panel_y_dist - 54);
    ObjectSetString(0, "GridV22_LblBEP", OBJPROP_FONT, "Consolas");
    ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_FONTSIZE, 9);
    ObjectSetInteger(0, "GridV22_LblBEP", OBJPROP_COLOR, clrGold);
@@ -255,7 +255,7 @@ int OnInit()
    ObjectSetInteger(0, "BtnSellGrid", OBJPROP_BGCOLOR, clrCrimson);
    ObjectSetInteger(0, "BtnSellGrid", OBJPROP_COLOR, clrWhite);
 
-   // Tombol "C" kini berfungsi sebagai Instant Runner (Close All Except Runner)
+   // Tombol "C" berfungsi sebagai Instant Runner (Close All Except Runner)
    ObjectCreate(0, "BtnClosePos", OBJ_BUTTON, 0, 0, 0);
    ObjectSetInteger(0, "BtnClosePos", OBJPROP_CORNER, CORNER_LEFT_UPPER);
    ObjectSetInteger(0, "BtnClosePos", OBJPROP_XDISTANCE, 120);
@@ -291,7 +291,7 @@ int OnInit()
 
    UpdateVisualDashboard();
 
-   Print("Asisten Grid V22.22 Multi-Instrument (Tombol C = Instant Runner) Aktif pada: ", _Symbol);
+   Print("Asisten Grid V22.23 Multi-Instrument (Bottom-Left Panel + Tombol C Instant Runner) Aktif pada: ", _Symbol);
    return(INIT_SUCCEEDED);
   }
 

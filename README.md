@@ -1,6 +1,6 @@
-# Grid Assistant Pro V22.22 🤖📈
+# Grid Assistant Pro V22.23 🤖📈
 
-**Grid Assistant Pro V22.22** (`GridEA_Sync.mq5`) is an advanced Expert Advisor (EA) for MetaTrader 5, designed as a semi-automated grid trading assistant for **Gold (XAUUSD)** and **Forex pairs (EURUSD, GBPUSD, USDJPY, etc.)**.
+**Grid Assistant Pro V22.23** (`GridEA_Sync.mq5`) is an advanced Expert Advisor (EA) for MetaTrader 5, designed as a semi-automated grid trading assistant for **Gold (XAUUSD)** and **Forex pairs (EURUSD, GBPUSD, USDJPY, etc.)**.
 
 This EA does not take random positions on its own. Instead, it gives you full control by providing instant execution tools, mass SL/TP synchronization, real-time visual BEP & dashboard monitoring, and a highly advanced position rescue & trend-catching system (Smart Runner with BE+ Protection).
 
